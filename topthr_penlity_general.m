@@ -1,7 +1,7 @@
 %%%% PENALTY METHOD USING IMGAUSSFILT %%%%
 %** 最小单元尺度固定为1
 function [y, loop, loop_k, c, x, energies, energies_k]= ...
-    topthr_penlity_general(nelx, nely, lambda, r0, volfrac, frac, g, sd, objectfunc, bc, w,continuation, x, fileID,logtype, V_constrain, descent_type)
+    topthr_penlity_general(nelx0, nely0, lambda, r0, volfrac, frac, g, sd, objectfunc, bc, w,continuation, x, fileID,logtype, V_constrain, descent_type)
 % nelx: number of elements on x axis
 % nely: number of elements on y axis
 % volfrac: volume fraction of material to total area
@@ -22,18 +22,25 @@ function [y, loop, loop_k, c, x, energies, energies_k]= ...
 % sameEmin: calculate the compliance each iteration using this specified value as Emin
 % return c: compliance computed with filtered chi
 %% OPTIMIZATION PARAMETERS
-tol = 1;   %容许变化
+global F H freedofs nelx nely E0 Emin mu lambdae
+nelx = nelx0;
+nely = nely0;  
+nu = 1/3;       %设置泊松比
+mu = 1/(1-nu^2)/24;
+lambdae = nu/(1-nu^2)/24;
+tol = 1;   %容许变化  
 maxtimes = 100;  %最大迭代次数
 r = r0;
 gamma1 = 3;
 gamma2 = 1.5;
 M = floor(nelx*nely*volfrac); %向下取整，\Omega1的元的数量
-loop = 1;
+loop = 1;  
 loop_k = 1;
 change = 10; %两次迭代中分布场xPhys的变化
 gamma = g*sqrt(2*pi)/(sd*1/nely); %sd*1 = sd, 若想对分量求和应使用norm(sd,1) sd/nely = tau
 energies = []; %存储每次迭代的目标函数值
 energies_k = []; %存储每次搜索的目标函数值
+
 %% MATERIAL PROPERTIES
 E0 = 5000*8/3;  %设置杨氏模量
 Emin = E0*frac; %设置人工材料的杨氏模量
@@ -70,7 +77,8 @@ switch objectfunc %伴随问题的Dirichlet边界同元问题相同
         %参数1填入行坐标，参数2填入列坐标，参数3填入值，参数4、5填入矩阵大小
         Hout((2*(nelx+1)*(nely+1)-2*force_length-1):2:(2*(nelx+1)*(nely+1)-1)) = 1; 
 end
-F = Fin + Hout;
+
+F= Fin + Hout;
 H = Fin + w*Hout;
 alldofs = [1:2*(nely+1)*(nelx+1)]; %所有自由度编号
 freedofs = setdiff(alldofs,fixeddofs);  %Dirichlet 边界外的自由度编号
@@ -113,7 +121,7 @@ while 1
     end
     %% OBJECTIVE FUNCTION AND SENSITIVITY ANALYSIS
     if loop == 1
-        [UV,c] = solver_elasticity_Q1(xPhys,F,H,freedofs,nelx,nely,E0,Emin);
+        [UV,c] = solver_elasticity_Q1(xPhys);
         PG = g*sum(sum((1-x).*xPhys));
         energies(loop) = c+PG; %记录目标函数值
         energies_k(loop_k) = energies(loop);
@@ -184,7 +192,7 @@ while 1
         else
             xPhys_new = xnew;
         end
-        [UV,c] = solver_elasticity_Q1(xPhys_new,F,H,freedofs,nelx,nely,E0,Emin); %计算试探的目标函数值
+        [UV,c] = solver_elasticity_Q1(xPhys_new); %计算试探的目标函数值
         PG = g*sum(sum((1-xnew).*xPhys_new)); %计算新的周长约束
         til_c = c + PG;
         energies_k(loop_k) = til_c;
@@ -231,7 +239,7 @@ while 1
         end
     end
 end
-[~,c] = solver_elasticity_Q1(x,F,H,freedofs,nelx,nely,E0,Emin);
+[~,c] = solver_elasticity_Q1(x);
 loop = loop + 1;
 energies(loop) = c+g*(sum(sum((1-x).*xPhys))); %计算最后的目标函数值
 %% FINAL OBJECTIVE FUNCTION WITHOUT SMOOTHING

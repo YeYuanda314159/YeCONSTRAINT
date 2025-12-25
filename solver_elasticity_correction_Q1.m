@@ -1,12 +1,16 @@
-function [UV,c] = solver_elasticity_Q1(xPhys)
-global F H freedofs nelx nely E0 Emin;
+function [sigma_square] = solver_elasticity_correction_Q1(xPhys,lambda,xi,C)
+
+global F H freedofs nelx nely E0 Emin  mu lambdae 
 %% µ¥Î»µ¥Ôª¸Õ¶È¾ØÕó
-nu = 1/3;       %ÉèÖÃ²´ËÉ±È
 A11 = [12  3 -6 -3;  3 12  3  0; -6  3 12 -3; -3  0 -3 12];
 A12 = [-6 -3  0  3; -3 -6 -3 -6;  0 -3 -6  3;  3 -6  3 -6];
 B11 = [-4  3 -2  9;  3 -4 -9  4; -2 -9 -4 -3;  9  4 -3 -4];
 B12 = [ 2 -3  4 -9; -3  2  9 -2;  4  9  2  3; -9 -2  3  2];
-KE = (1/(1-nu^2)/24*([A11 A12;A12' A11]+nu*[B11 B12;B12' B11])); 
+AA = [A11 A12;A12' A11];
+BB = [B11 B12;B12' B11]; 
+ak = 1/(1+lambda)*(1./(1/Emin+xPhys*(1/E0-1/Emin))).*max(xi-C,0).*xPhys;
+A = 1./(1+2*mu*ak);
+B = lambdae.*ak./A./((3*lambda+2*mu)*ak+1);
 %% PREPARE FINITE ELEMENT ANALYSIS
 % Ae = 2\mu e + \lambda tr(e) I
 % \mu = E /2/ (1+nu) \lambda = E*nu/(1+nu)/(1+nu*(1-d))
@@ -18,17 +22,16 @@ iK = reshape(kron(edofMat,ones(8,1))',64*nelx*nely,1);%±éÀúÃ¿¸öµ¥ÔªÒÀ´Î¾­¹ıµÄ½Úµ
 jK = reshape(kron(edofMat,ones(1,8))',64*nelx*nely,1);%ÓÃÓÚ×°Åä¸Õ¶È¾ØÕó
 %% Çó½â
 U = zeros(2*(nely + 1)*(nelx + 1), 1); %Ô¼ÊøµÄ½âÏòÁ¿
-V = zeros(2*(nely + 1)*(nelx + 1), 1); %Ä¿±êº¯Êı¶ÔÓ¦µÄ½âÏòÁ¿
-sK = reshape(KE(:)*(1./(1/Emin+xPhys(:)'*(1/E0-1/Emin))), 64*nelx*nely, 1);%»ìºÏÎÊÌâ
+%V = zeros(2*(nely + 1)*(nelx + 1), 1); %Ä¿±êº¯Êı¶ÔÓ¦µÄ½âÏòÁ¿
+sK = reshape(AA(:)*A(:)+BB(:)*B(:), 64*nelx*nely, 1);%»ìºÏÎÊÌâ
 %ÖØÅÅÇ°µÄ¾ØÕóÃ¿Ò»ÁĞ±íÊ¾Ò»¸öÎïÀíµ¥ÔªµÄ¸Õ¶È¾ØÕó
 %xPhys(:),±íÊ¾°´ÁĞÈ¡Êı¾İ½«¾ØÕó±ä³ÉÒ»ÁĞÏòÁ¿
 K = sparse(iK,jK,sK); K = (K+K')/2; %×°ÅäÕûÌå¸Õ¶È¾ØÕó²¢±£Ö¤¶Ô³ÆĞÔ
 U(freedofs) = K(freedofs,freedofs)\F(freedofs); %UÊÇ×´Ì¬µÄÎ»ÒÆÏòÁ¿
-V(freedofs) = K(freedofs,freedofs)\H(freedofs); %VÊÇ°éËæµÄÎ»ÒÆÏòÁ¿
-
+%V(freedofs) = K(freedofs,freedofs)\H(freedofs); %VÊÇ°éËæµÄÎ»ÒÆÏòÁ¿
+  
 %% ¼ÆËãÏà¹Øº¯ÊıºÍ·ºº¯Öµ
-ceW = reshape(sum((U(edofMat)*KE).*V(edofMat),2),nely,nelx);
-UV = 1./(1/Emin+xPhys*(1/E0-1/Emin)).*ceW; %Èá¶Èº¯Êı: 1/A(\chi)E_0e(u):e(v)
-c = sum(sum(UV));
-
+AU = reshape(sum((U(edofMat)*AA).*ones(nelx*nely,1),2),nely,nelx);
+BU = reshape(sum((U(edofMat)*BB).*ones(nelx*nely,1),2),nely,nelx);
+sigma_square = A.*AU+B.*BU; %Èá¶Èº¯Êı: 1/A(\chi)E_0e(u):e(v)
 end
